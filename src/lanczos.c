@@ -2,74 +2,74 @@
 #include "lanczos.h"
 #include<math.h>
 
-void kernel(int k, Vector * v, SparseMatrix * A, double *arrt)
+void kernel(int k, double *v, SparseMatrix * A, double *arrt)
 {
   unsigned int i, j, l, m;
   double sum;
-  Vector *y, *x;
+  double *y, *x;
   sum = 0.0;
-  for (i = 0; i < v->n; i++) {
-    sum += v->value[i] * v->value[i];
+  for (i = 0; i < A->nrows; i++) {
+    sum += v[i] * v[i];
   }
   sum = 1 / sqrt(sum);
-  for (i = 0; i < v->n; i++) {
+  for (i = 0; i < A->nrows; i++) {
     // WRITE to x[i]
-    v->value[i] *= sum;
+    v[i] *= sum;
   }
   for (j = 0; j < k; j++) {
-    y = v + j + 1;
-    x = v + j;
+    y = v + A->nrows * (j + 1);
+    x = v + A->nrows * j;
     sum = 0.0;
     l = 0;
-    for (i = 0; i < y->n; i++) {
+    for (i = 0; i < A->nrows; i++) {
       if (A->deg[i] > 0)
         for (m = 0; m < A->deg[i]; m++) {
-          sum += x->value[A->adj[i][m]] * A->value[i][l];
+          sum += x[A->adj[i][m]] * A->value[i][l];
           l++;
         }
       // WRITE to y[i]
-      y->value[i] = sum;
+      y[i] = sum;
       sum = 0.0;
       l = 0;
     }
 
     if (j > 0) {
-      x = v + j - 1;
-      y = v + j + 1;
-      for (i = 0; i < x->n; i++) {
+      x = v + A->nrows * (j - 1);
+      y = v + A->nrows * (j + 1);
+      for (i = 0; i < A->nrows; i++) {
         // WRITE to y[i]
         // READ from arrt[j-1][j]
-        y->value[i] += (-arrt[(j - 1) * (k + 1) + j]) * x->value[i];
+        y[i] += (-arrt[(j - 1) * (k + 1) + j]) * x[i];
       }
     }
     sum = 0.0;
-    x = v + j;
-    y = v + j + 1;
-    for (i = 0; i < x->n; i++) {
+    x = v + A->nrows * j;
+    y = v + A->nrows * (j + 1);
+    for (i = 0; i < A->nrows; i++) {
       // READ from y[i]
-      sum += x->value[i] * y->value[i];
+      sum += x[i] * y[i];
     }
     // WRITE to arrt[j][j]
     arrt[j * (k + 1) + j] = sum;
 
-    x = v + j;
-    y = v + j + 1;
-    for (i = 0; i < x->n; i++) {
+    x = v + A->nrows * j;
+    y = v + A->nrows * (j + 1);
+    for (i = 0; i < A->nrows; i++) {
       // WRITE to y[i]
       // READ from arrt[j][j]
-      y->value[i] += (-arrt[j * (k + 1) + j]) * x->value[i];
+      y[i] += (-arrt[j * (k + 1) + j]) * x[i];
     }
     sum = 0.0;
-    x = v + j + 1;
-    for (i = 0; i < x->n; i++) {
-      sum += x->value[i] * x->value[i];
+    x = v + A->nrows * (j + 1);
+    for (i = 0; i < A->nrows; i++) {
+      sum += x[i] * x[i];
     }
     // WRITE to arrt[j+1][j]
     arrt[(j + 1) * (k + 1) + j] = sqrt(sum);
-    x = v + j + 1;
-    for (i = 0; i < x->n; i++) {
+    x = v + A->nrows * (j + 1);
+    for (i = 0; i < A->nrows; i++) {
       // READ from arrt[j+1][j]
-      x->value[i] *= 1 / arrt[(j + 1) * (k + 1) + j];
+      x[i] *= 1 / arrt[(j + 1) * (k + 1) + j];
     }
     // WRITE to arrt[j][j+1]
     // READ from arrt[j+1][j]
@@ -81,33 +81,34 @@ Vector *lanczos(SparseMatrix * A, int k)
 {
   int j, i;
   double *arrt;
-  struct Vector *v = (struct Vector *)malloc((k + 1) * sizeof(struct Vector));
+  double *v = (double *)malloc((k + 1) * A->nrows * sizeof(double));
   struct Vector *diag = (struct Vector *)malloc(2 * sizeof(struct Vector));
   struct FullMatrix *V = (struct FullMatrix *)malloc(sizeof(struct FullMatrix));
 
   createvector(diag, k);
   createvector(diag + 1, k);
   createfullmatrix(V, A->nrows, k + 1);
-  for (j = 0; j < k + 1; j++) {
-    createvector(v + j, A->nrows);
-    for (i = 0; i < A->nrows; i++)
-      v[j].value[i] = 0.0;
-  }
+  for (i = 0; i < (k + 1) * A->nrows; i++)
+    v[i] = 0.0;
 
   arrt = malloc((k + 1) * (k + 1) * sizeof(double));
   for (i = 0; i < (k + 1) * (k + 1); i++)
     arrt[i] = 0.0;
 
-  fuellevector(v);
+  for (i = 0; i < A->nrows; i++) {
+    v[i] = randomzahl(i);
+  }
 
   kernel(k, v, A, arrt);
 
   fuelledia(diag, arrt, k);
-  fillfullmatrix(*V, v);
+  for (i = 0; i < V->ncols; i++) {
+    for (j = 0; j < V->nrows; j++) {
+      V->value[j + V->nrows * i] = v[i * A->nrows + j];
+    }
+  }
   printfilematrix(diag, *V, k);
 
-  for (i = 0; i < k + 1; i++)
-    free((v + i)->value);
   free(v);
 
   free(arrt);

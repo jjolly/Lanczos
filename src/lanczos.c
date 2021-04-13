@@ -16,6 +16,7 @@ void kernel(int k, Vector * v, SparseMatrix * A, double **arrt)
   sum = 1 / sqrt(sum);
   for (i = 0; i < x->n; i++) {
     x->value[i] *= sum;
+    // WRITE to x[i]
   }
   for (j = 0; j < k; j++) {
     // sparsematrixvector(v+j+1, A, v+j); 
@@ -29,6 +30,7 @@ void kernel(int k, Vector * v, SparseMatrix * A, double **arrt)
           sum += x->value[A->adj[i][m]] * A->value[i][l];
           l++;
         }
+      // WRITE to y[i]
       y->value[i] = sum;
       sum = 0.0;
       l = 0;
@@ -40,6 +42,8 @@ void kernel(int k, Vector * v, SparseMatrix * A, double **arrt)
       y = v + j + 1;
       for (i = 0; i < x->n; i++) {
         y->value[i] += (-arrt[j - 1][j]) * x->value[i];
+        // WRITE to y[i]
+        // READ from arrt[j-1][j]
       }
     }
     // arrt[j][j] = dotproduct(v+j, v+j+1);
@@ -47,15 +51,19 @@ void kernel(int k, Vector * v, SparseMatrix * A, double **arrt)
     x = v + j;
     y = v + j + 1;
     for (i = 0; i < x->n; i++) {
+      // READ from y[i]
       sum += x->value[i] * y->value[i];
     }
     arrt[j][j] = sum;
+    // WRITE to arrt[j][j]
 
     // axpy(-arrt[j][j], v+j, v+j+1);
     x = v + j;
     y = v + j + 1;
     for (i = 0; i < x->n; i++) {
       y->value[i] += (-arrt[j][j]) * x->value[i];
+      // WRITE to y[i]
+      // READ from arrt[j][j]
     }
     // arrt[j+1][j] = norm(v+j+1);
     sum = 0.0;
@@ -64,12 +72,16 @@ void kernel(int k, Vector * v, SparseMatrix * A, double **arrt)
       sum += x->value[i] * x->value[i];
     }
     arrt[j + 1][j] = sqrt(sum);
+    // WRITE to arrt[j+1][j]
     // scalevector(1/arrt[j+1][j], v+j+1); 
     x = v + j + 1;
     for (i = 0; i < x->n; i++) {
       x->value[i] *= 1 / arrt[j + 1][j];
+      // READ from arrt[j+1][j]
     }
     arrt[j][j + 1] = arrt[j + 1][j];
+    // WRITE to arrt[j][j+1]
+    // READ from arrt[j+1][j]
   }
 }
 

@@ -9,14 +9,13 @@ void kernel(int k, Vector * v, SparseMatrix * A, double **arrt)
   Vector *y, *x;
   // scalevector(1 / norm(v), v);
   sum = 0.0;
-  x = v;
-  for (i = 0; i < x->n; i++) {
-    sum += x->value[i] * x->value[i];
+  for (i = 0; i < v->n; i++) {
+    sum += v->value[i] * v->value[i];
   }
   sum = 1 / sqrt(sum);
-  for (i = 0; i < x->n; i++) {
-    x->value[i] *= sum;
+  for (i = 0; i < v->n; i++) {
     // WRITE to x[i]
+    v->value[i] *= sum;
   }
   for (j = 0; j < k; j++) {
     // sparsematrixvector(v+j+1, A, v+j); 

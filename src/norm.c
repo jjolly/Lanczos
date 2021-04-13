@@ -2,7 +2,7 @@
 #include <math.h>
 #include "lanczos.h"
 
-double norm(Vector *x) {
+/*double norm(Vector *x) {
        int i;
        double sum=0.0;
        for(i=0; i<x->n; i++) {
@@ -10,4 +10,4 @@ double norm(Vector *x) {
        }      
        sum = sqrt(sum);
        return sum;
-}
+}*/

@@ -1,7 +1,7 @@
 //sparsematrixvector
 #include "lanczos.h"
 
-void sparsematrixvector(Vector *y, SparseMatrix *A, Vector *x) {
+/*void sparsematrixvector(Vector *y, SparseMatrix *A, Vector *x) {
    if(A->ncols != x->n || y->n != A->nrows) printf("Keine gleiche Dimension!");
    else {
         unsigned int i,j,l=0;
@@ -17,4 +17,4 @@ void sparsematrixvector(Vector *y, SparseMatrix *A, Vector *x) {
                  l=0;               
         }                 
    }
-}
+}*/

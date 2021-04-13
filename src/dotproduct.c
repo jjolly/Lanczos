@@ -1,7 +1,7 @@
 //dotproduct
 #include "lanczos.h"
 
-double dotproduct(Vector *x, Vector *y) {
+/* double dotproduct(Vector *x, Vector *y) {
      if(y->n != x->n) printf("Dimension dismatch!");
      else {
        int i;
@@ -11,4 +11,4 @@ double dotproduct(Vector *x, Vector *y) {
      }  
      return sum;
      }
-}
+}*/

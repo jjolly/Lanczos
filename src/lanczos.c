@@ -2,7 +2,7 @@
 #include "lanczos.h"
 #include<math.h>
 
-void kernel(int k, Vector * v, SparseMatrix * A, double **arrt)
+void kernel(int k, Vector * v, SparseMatrix * A, double *arrt)
 {
   unsigned int i, j, l, m;
   double sum;
@@ -40,9 +40,9 @@ void kernel(int k, Vector * v, SparseMatrix * A, double **arrt)
       x = v + j - 1;
       y = v + j + 1;
       for (i = 0; i < x->n; i++) {
-        y->value[i] += (-arrt[j - 1][j]) * x->value[i];
         // WRITE to y[i]
         // READ from arrt[j-1][j]
+        y->value[i] += (-arrt[(j - 1) * (k + 1) + j]) * x->value[i];
       }
     }
     // arrt[j][j] = dotproduct(v+j, v+j+1);
@@ -53,16 +53,16 @@ void kernel(int k, Vector * v, SparseMatrix * A, double **arrt)
       // READ from y[i]
       sum += x->value[i] * y->value[i];
     }
-    arrt[j][j] = sum;
     // WRITE to arrt[j][j]
+    arrt[j * (k + 1) + j] = sum;
 
     // axpy(-arrt[j][j], v+j, v+j+1);
     x = v + j;
     y = v + j + 1;
     for (i = 0; i < x->n; i++) {
-      y->value[i] += (-arrt[j][j]) * x->value[i];
       // WRITE to y[i]
       // READ from arrt[j][j]
+      y->value[i] += (-arrt[j * (k + 1) + j]) * x->value[i];
     }
     // arrt[j+1][j] = norm(v+j+1);
     sum = 0.0;
@@ -70,24 +70,24 @@ void kernel(int k, Vector * v, SparseMatrix * A, double **arrt)
     for (i = 0; i < x->n; i++) {
       sum += x->value[i] * x->value[i];
     }
-    arrt[j + 1][j] = sqrt(sum);
     // WRITE to arrt[j+1][j]
+    arrt[(j + 1) * (k + 1) + j] = sqrt(sum);
     // scalevector(1/arrt[j+1][j], v+j+1); 
     x = v + j + 1;
     for (i = 0; i < x->n; i++) {
-      x->value[i] *= 1 / arrt[j + 1][j];
       // READ from arrt[j+1][j]
+      x->value[i] *= 1 / arrt[(j + 1) * (k + 1) + j];
     }
-    arrt[j][j + 1] = arrt[j + 1][j];
     // WRITE to arrt[j][j+1]
     // READ from arrt[j+1][j]
+    arrt[j * (k + 1) + j + 1] = arrt[(j + 1) * (k + 1) + j];
   }
 }
 
 Vector *lanczos(SparseMatrix * A, int k)
 {
   int j, i;
-  double **arrt;
+  double *arrt;
   struct Vector *v = (struct Vector *)malloc((k + 1) * sizeof(struct Vector));
   struct Vector *diag = (struct Vector *)malloc(2 * sizeof(struct Vector));
   struct FullMatrix *V = (struct FullMatrix *)malloc(sizeof(struct FullMatrix));
@@ -101,15 +101,9 @@ Vector *lanczos(SparseMatrix * A, int k)
       v[j].value[i] = 0.0;
   }
 
-  arrt = malloc((k + 1) * sizeof(double));
-  for (i = 0; i < k + 1; i++)
-    arrt[i] = malloc((k + 1) * sizeof(double));
-
-  for (i = 0; i < k + 1; i++) {
-    for (j = 0; j < k + 1; j++)
-      arrt[i][j] = 0.0;
-
-  }
+  arrt = malloc((k + 1) * (k + 1) * sizeof(double));
+  for (i = 0; i < (k + 1) * (k + 1); i++)
+    arrt[i] = 0.0;
 
   fuellevector(v);
 
@@ -123,8 +117,6 @@ Vector *lanczos(SparseMatrix * A, int k)
     free((v + i)->value);
   free(v);
 
-  for (i = 0; i < k + 1; i++)
-    free(arrt[i]);
   free(arrt);
 
   deletefullmatrix(V);

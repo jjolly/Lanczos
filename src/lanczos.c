@@ -77,16 +77,15 @@ void kernel(int k, double *v, SparseMatrix * A, double *arrt)
   }
 }
 
-Vector *lanczos(SparseMatrix * A, int k)
+double *lanczos(SparseMatrix * A, int k)
 {
   int j, i;
   double *arrt;
   double *v = (double *)malloc((k + 1) * A->nrows * sizeof(double));
-  struct Vector *diag = (struct Vector *)malloc(2 * sizeof(struct Vector));
+  //struct Vector *diag = (struct Vector *)malloc(2 * sizeof(struct Vector));
+  double *diag = (double *)malloc(2 * k * sizeof(double));
   struct FullMatrix *V = (struct FullMatrix *)malloc(sizeof(struct FullMatrix));
 
-  createvector(diag, k);
-  createvector(diag + 1, k);
   createfullmatrix(V, A->nrows, k + 1);
   for (i = 0; i < (k + 1) * A->nrows; i++)
     v[i] = 0.0;
@@ -101,7 +100,14 @@ Vector *lanczos(SparseMatrix * A, int k)
 
   kernel(k, v, A, arrt);
 
-  fuelledia(diag, arrt, k);
+  //fuelledia(diag, arrt, k);
+  for (j = 0; j < k; j++) {
+    diag[j] = arrt[j * (k + 1) + j];
+    if (j > 0)
+      diag[k + j - 1] = arrt[j * (k + 1) + j - 1];
+  }
+  diag[2 * k - 1] = arrt[k * (k + 1) + k - 1];
+
   for (i = 0; i < V->ncols; i++) {
     for (j = 0; j < V->nrows; j++) {
       V->value[j + V->nrows * i] = v[i * A->nrows + j];

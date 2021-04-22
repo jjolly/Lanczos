@@ -7,14 +7,14 @@ void kernel(int k, double *v, SparseMatrix * A, double *arrt)
 {
   unsigned int i, j, l, m;
   double sum;
-  double *y;
   sum = 0.0;
   for (i = 0; i < A->nrows; i++) {
+    // READ from v[0][0..nrows]
     sum += v[i] * v[i];
   }
   sum = 1 / sqrt(sum);
   for (i = 0; i < A->nrows; i++) {
-    // WRITE to v[i]
+    // WRITE to v[0][0..nrows]
     v[i] *= sum;
   }
   for (j = 0; j < k; j++) {
@@ -23,10 +23,11 @@ void kernel(int k, double *v, SparseMatrix * A, double *arrt)
     for (i = 0; i < A->nrows; i++) {
       if (A->deg[i] > 0)
         for (m = 0; m < A->deg[i]; m++) {
+          // READ from v[j..j+ncols][0..nrows]
           sum += v[j * A->nrows + A->adj[i][m]] * A->value[i][l];
           l++;
         }
-      // WRITE to y[i]
+      // WRITE to v[j+1][0..nrows]
       v[(j + 1) * A->nrows + i] = sum;
       sum = 0.0;
       l = 0;
@@ -34,31 +35,36 @@ void kernel(int k, double *v, SparseMatrix * A, double *arrt)
 
     if (j > 0) {
       for (i = 0; i < A->nrows; i++) {
-        // WRITE to y[i]
+        // WRITE to v[j+1][0..nrows]
         // READ from arrt[j-1][j]
+        // READ from v[j-1][0..nrows]
         v[(j + 1) * A->nrows + i] += (-arrt[(j - 1) * (k + 1) + j]) * v[(j - 1) * A->nrows + i];
       }
     }
     sum = 0.0;
     for (i = 0; i < A->nrows; i++) {
-      // READ from y[i]
+      // READ from v[j][0..nrows]
+      // READ from v[j+1][0..nrows]
       sum += v[j * A->nrows + i] * v[(j + 1) * A->nrows + i];
     }
     // WRITE to arrt[j][j]
     arrt[j * (k + 1) + j] = sum;
 
     for (i = 0; i < A->nrows; i++) {
-      // WRITE to y[i]
+      // WRITE to v[j+1][0..nrows]
       // READ from arrt[j][j]
+      // READ from v[j][0..nrows]
       v[(j + 1) * A->nrows + i] += (-arrt[j * (k + 1) + j]) * v[j * A->nrows + i];
     }
     sum = 0.0;
     for (i = 0; i < A->nrows; i++) {
+      // READ from v[j+1][0..nrows]
       sum += v[(j + 1) * A->nrows + i] * v[(j + 1) * A->nrows + i];
     }
     // WRITE to arrt[j+1][j]
     arrt[(j + 1) * (k + 1) + j] = sqrt(sum);
     for (i = 0; i < A->nrows; i++) {
+      // WRITE to v[j+1][0..nrows]
       // READ from arrt[j+1][j]
       v[(j + 1) * A->nrows + i] *= 1 / arrt[(j + 1) * (k + 1) + j];
     }

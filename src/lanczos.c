@@ -1,6 +1,7 @@
 // lanczos
 #include "lanczos.h"
 #include<math.h>
+#include<cuda_runtime.h>
 
 void kernel(int k, double *v, SparseMatrix * A, double *arrt)
 {
@@ -97,7 +98,18 @@ double *lanczos(SparseMatrix * A, int k)
     v[i] = randomzahl(i);
   }
 
+  cudaEvent_t start, stop;
+  cudaEventCreate(&start);
+  cudaEventCreate(&stop);
+
+  cudaEventRecord(start,0);
   kernel(k, v, A, arrt);
+  cudaEventRecord(stop,0);
+
+  cudaEventSynchronize(stop);
+  float milliseconds = 0;
+  cudaEventElapsedTime(&milliseconds, start, stop);
+  printf("Elapsed runtime %f\n", milliseconds);
 
   for (j = 0; j < k; j++) {
     diag[j] = arrt[j * (k + 1) + j];

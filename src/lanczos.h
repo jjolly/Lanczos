@@ -44,5 +44,5 @@ double randomzahl(int k);
 int printfilematrix(double *diag, FullMatrix V, int k);
 void fillfullmatrix(FullMatrix V, Vector * v);
 void fuellevector(Vector * x);
-double *lanczos(SparseMatrix * A, int k);
+double *lanczos(FullMatrix * A, int k);
 void fuelledia(Vector * diag, double *arrt, int k);

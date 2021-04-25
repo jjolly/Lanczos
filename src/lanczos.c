@@ -5,7 +5,7 @@
 
 void kernel(int k, double *v, int nrows, int *A_deg, int **A_adj, double **A_value, double *arrt)
 {
-  unsigned int i, j, l, m;
+  unsigned int i, j, m;
   double sum;
   sum = 0.0;
   for (i = 0; i < nrows; i++) {
@@ -19,18 +19,15 @@ void kernel(int k, double *v, int nrows, int *A_deg, int **A_adj, double **A_val
   }
   for (j = 0; j < k; j++) {
     sum = 0.0;
-    l = 0;
     for (i = 0; i < nrows; i++) {
       if (A_deg[i] > 0)
         for (m = 0; m < A_deg[i]; m++) {
           // READ from v[j][0..nrows]
-          sum += v[j * nrows + A_adj[i][m]] * A_value[i][l];
-          l++;
+          sum += v[j * nrows + A_adj[i][m]] * A_value[i][m];
         }
       // WRITE to v[j+1][0..nrows]
       v[(j + 1) * nrows + i] = sum;
       sum = 0.0;
-      l = 0;
     }
 
     if (j > 0) {

@@ -3,70 +3,70 @@
 #include<math.h>
 #include<cuda_runtime.h>
 
-void kernel(int k, double *v, SparseMatrix * A, double *arrt)
+void kernel(int k, double *v, int nrows, int *A_deg, int **A_adj, double **A_value, double *arrt)
 {
   unsigned int i, j, l, m;
   double sum;
   sum = 0.0;
-  for (i = 0; i < A->nrows; i++) {
+  for (i = 0; i < nrows; i++) {
     // READ from v[0][0..nrows]
     sum += v[i] * v[i];
   }
   sum = 1 / sqrt(sum);
-  for (i = 0; i < A->nrows; i++) {
+  for (i = 0; i < nrows; i++) {
     // WRITE to v[0][0..nrows]
     v[i] *= sum;
   }
   for (j = 0; j < k; j++) {
     sum = 0.0;
     l = 0;
-    for (i = 0; i < A->nrows; i++) {
-      if (A->deg[i] > 0)
-        for (m = 0; m < A->deg[i]; m++) {
-          // READ from v[j..j+ncols][0..nrows]
-          sum += v[j * A->nrows + A->adj[i][m]] * A->value[i][l];
+    for (i = 0; i < nrows; i++) {
+      if (A_deg[i] > 0)
+        for (m = 0; m < A_deg[i]; m++) {
+          // READ from v[j][0..nrows]
+          sum += v[j * nrows + A_adj[i][m]] * A_value[i][l];
           l++;
         }
       // WRITE to v[j+1][0..nrows]
-      v[(j + 1) * A->nrows + i] = sum;
+      v[(j + 1) * nrows + i] = sum;
       sum = 0.0;
       l = 0;
     }
 
     if (j > 0) {
-      for (i = 0; i < A->nrows; i++) {
+      for (i = 0; i < nrows; i++) {
         // WRITE to v[j+1][0..nrows]
         // READ from arrt[j-1][j]
         // READ from v[j-1][0..nrows]
-        v[(j + 1) * A->nrows + i] += (-arrt[(j - 1) * (k + 1) + j]) * v[(j - 1) * A->nrows + i];
+        v[(j + 1) * nrows + i] += (-arrt[(j - 1) * (k + 1) + j]) * v[(j - 1) * nrows + i];
       }
     }
     sum = 0.0;
-    for (i = 0; i < A->nrows; i++) {
+    for (i = 0; i < nrows; i++) {
       // READ from v[j][0..nrows]
       // READ from v[j+1][0..nrows]
-      sum += v[j * A->nrows + i] * v[(j + 1) * A->nrows + i];
+      sum += v[j * nrows + i] * v[(j + 1) * nrows + i];
     }
     // WRITE to arrt[j][j]
     arrt[j * (k + 1) + j] = sum;
 
-    for (i = 0; i < A->nrows; i++) {
+    for (i = 0; i < nrows; i++) {
       // WRITE to v[j+1][0..nrows]
       // READ from arrt[j][j]
       // READ from v[j][0..nrows]
-      v[(j + 1) * A->nrows + i] += (-arrt[j * (k + 1) + j]) * v[j * A->nrows + i];
+      v[(j + 1) * nrows + i] += (-arrt[j * (k + 1) + j]) * v[j * nrows + i];
     }
     sum = 0.0;
-    for (i = 0; i < A->nrows; i++) {
+    for (i = 0; i < nrows; i++) {
       // READ from v[j+1][0..nrows]
-      sum += v[(j + 1) * A->nrows + i] * v[(j + 1) * A->nrows + i];
+      sum += v[(j + 1) * nrows + i] * v[(j + 1) * nrows + i];
     }
     // WRITE to arrt[j+1][j]
     arrt[(j + 1) * (k + 1) + j] = sqrt(sum);
-    for (i = 0; i < A->nrows; i++) {
+    for (i = 0; i < nrows; i++) {
       // WRITE to v[j+1][0..nrows]
       // READ from arrt[j+1][j]
-      v[(j + 1) * A->nrows + i] *= 1 / arrt[(j + 1) * (k + 1) + j];
+      v[(j + 1) * nrows + i] *= 1 / arrt[(j + 1) * (k + 1) + j];
     }
     // WRITE to arrt[j][j+1]
     // READ from arrt[j+1][j]
@@ -99,7 +99,7 @@ double *lanczos(SparseMatrix * A, int k)
   cudaEventCreate(&stop);
 
   cudaEventRecord(start,0);
-  kernel(k, v, A, arrt);
+  kernel(k, v, A->nrows, A->deg, A->adj, A->value, arrt);
   cudaEventRecord(stop,0);
 
   cudaEventSynchronize(stop);

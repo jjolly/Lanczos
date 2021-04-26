@@ -79,34 +79,29 @@ double *lanczos(SparseMatrix * A, int k)
 {
   int j, i;
   double *arrt;
-  double *v = (double *)malloc((k + 1) * A->nrows * sizeof(double));
   double *diag = (double *)malloc(2 * k * sizeof(double));
   struct FullMatrix *V = (struct FullMatrix *)malloc(sizeof(struct FullMatrix));
 
   createfullmatrix(V, A->nrows, k + 1);
   for (i = 0; i < (k + 1) * A->nrows; i++)
-    v[i] = 0.0;
+    V->value[i] = (i < A->nrows) ? randomzahl(i) : 0.0;
 
   arrt = malloc((k + 1) * (k + 1) * sizeof(double));
   for (i = 0; i < (k + 1) * (k + 1); i++)
     arrt[i] = 0.0;
-
-  for (i = 0; i < A->nrows; i++) {
-    v[i] = randomzahl(i);
-  }
 
   cudaEvent_t start, stop;
   cudaEventCreate(&start);
   cudaEventCreate(&stop);
 
   cudaEventRecord(start, 0);
-  kernel(k, v, A->nrows, A->ncols, A->deg, A->adj, A->value, arrt);
+  kernel(k, V->value, A->nrows, A->ncols, A->deg, A->adj, A->value, arrt);
   cudaEventRecord(stop, 0);
 
   cudaEventSynchronize(stop);
   float milliseconds = 0;
   cudaEventElapsedTime(&milliseconds, start, stop);
-  printf("Elapsed runtime %f\n", milliseconds);
+  printf("Elapsed runtime %fms\n", milliseconds);
 
   for (j = 0; j < k; j++) {
     diag[j] = arrt[j * (k + 1) + j];
@@ -115,14 +110,7 @@ double *lanczos(SparseMatrix * A, int k)
   }
   diag[2 * k - 1] = arrt[k * (k + 1) + k - 1];
 
-  for (i = 0; i < V->ncols; i++) {
-    for (j = 0; j < V->nrows; j++) {
-      V->value[j + V->nrows * i] = v[i * A->nrows + j];
-    }
-  }
   printfilematrix(diag, *V, k);
-
-  free(v);
 
   free(arrt);
 

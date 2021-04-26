@@ -1,10 +1,12 @@
 // lanczos
 #include "lanczos.h"
 #include<math.h>
+#include<cuda.h>
 #include<cuda_runtime.h>
 
-void kernel(int k, double *v, int nrows, int ncols, int *A_deg, int *A_adj,
-            double *A_value, double *arrt)
+__global__
+    void kernel(int k, double *v, int nrows, int ncols, int *A_deg, int *A_adj,
+                double *A_value, double *arrt)
 {
   unsigned int i, j, l, m;
   double sum;
@@ -86,17 +88,51 @@ double *lanczos(SparseMatrix * A, int k)
   for (i = 0; i < (k + 1) * A->nrows; i++)
     V->value[i] = (i < A->nrows) ? randomzahl(i) : 0.0;
 
-  arrt = malloc((k + 1) * (k + 1) * sizeof(double));
+  arrt = (double *)malloc((k + 1) * (k + 1) * sizeof(double));
   for (i = 0; i < (k + 1) * (k + 1); i++)
     arrt[i] = 0.0;
+
+  j = 0;
+  for (i = 0; i < A->nrows; i++)
+    j += A->deg[i];
 
   cudaEvent_t start, stop;
   cudaEventCreate(&start);
   cudaEventCreate(&stop);
 
+  double *d_v, *d_A_value, *d_arrt;
+  int *d_A_deg, *d_A_adj;
+
+  cudaMalloc((void **)&d_v, A->nrows * (k + 1) * sizeof(double));
+  cudaMemcpy(d_v, V->value, A->nrows * (k + 1) * sizeof(double),
+             cudaMemcpyHostToDevice);
+  cudaMalloc((void **)&d_A_deg, A->nrows * sizeof(int));
+  cudaMemcpy(d_A_deg, A->deg, A->nrows * sizeof(int), cudaMemcpyHostToDevice);
+  cudaMalloc((void **)&d_A_adj, j * sizeof(int));
+  cudaMemcpy(d_A_adj, A->adj, j * sizeof(int), cudaMemcpyHostToDevice);
+  cudaMalloc((void **)&d_A_value, j * sizeof(double));
+  cudaMemcpy(d_A_value, A->value, j * sizeof(double), cudaMemcpyHostToDevice);
+  cudaMalloc((void **)&d_arrt, (k + 1) * (k + 1) * sizeof(double));
+  cudaMemcpy(d_arrt, arrt, (k + 1) * (k + 1) * sizeof(double),
+             cudaMemcpyHostToDevice);
+
+  dim3 dimGrid(1, 1, 1);
+  dim3 dimBlock(1, 1, 1);
+
   cudaEventRecord(start, 0);
-  kernel(k, V->value, A->nrows, A->ncols, A->deg, A->adj, A->value, arrt);
+  kernel <<< dimGrid, dimBlock >>> (k, d_v, A->nrows, A->ncols, d_A_deg,
+                                    d_A_adj, d_A_value, d_arrt);
   cudaEventRecord(stop, 0);
+
+  cudaMemcpy(arrt, d_arrt, (k + 1) * (k + 1) * sizeof(double),
+             cudaMemcpyDeviceToHost);
+  cudaFree(d_arrt);
+  cudaMemcpy(V->value, d_v, A->nrows * (k + 1) * sizeof(double),
+             cudaMemcpyDeviceToHost);
+  cudaFree(d_v);
+  cudaFree(d_A_deg);
+  cudaFree(d_A_adj);
+  cudaFree(d_A_value);
 
   cudaEventSynchronize(stop);
   float milliseconds = 0;

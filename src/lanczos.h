@@ -18,8 +18,8 @@ struct SparseMatrix {
   int nrows;
   int ncols;
   int *deg;
-  int **adj;
-  double **value;
+  int *adj;
+  double *value;
 };
 typedef struct SparseMatrix SparseMatrix;
 

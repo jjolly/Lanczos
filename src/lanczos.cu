@@ -20,12 +20,13 @@ __global__
 void sum_sqr_vec(int j, int n, double *v, double *result) {
   __shared__ double sum[NUM_THREAD];
   int tid = threadIdx.x;
-  int i = j * n + threadIdx.x;
+  int i = tid;
+  int offset = j * n;
   sum[tid] = 0.0;
   while(i < n) { 
-    sum[tid] += v[i] * v[i];
+    sum[tid] += v[offset + i] * v[offset + i];
     if(i + NUM_THREAD < n)
-      sum[tid] += v[i + NUM_THREAD] * v[i + NUM_THREAD];
+      sum[tid] += v[offset + i + NUM_THREAD] * v[offset + i + NUM_THREAD];
     i += NUM_THREAD * 2;
   }
   __syncthreads();
@@ -46,15 +47,15 @@ __global__
 void sum_vec_vec(int j, int n, double *v, double *result) {
   __shared__ double sum[NUM_THREAD];
   int tid = threadIdx.x;
-  int i1 = j * n + threadIdx.x;
-  int i2 = (j + 1) * n + threadIdx.x;
+  int i = tid;
+  int offset1 = j * n;
+  int offset2 = (j + 1) * n;
   sum[tid] = 0.0;
-  while(i1 < n) { 
-    sum[tid] += v[i1] * v[i2];
-    if(i1 + NUM_THREAD < n)
-      sum[tid] += v[i1 + NUM_THREAD] * v[i2 + NUM_THREAD];
-    i1 += NUM_THREAD * 2;
-    i2 += NUM_THREAD * 2;
+  while(i < n) { 
+    sum[tid] += v[offset1 + i] * v[offset2 + i];
+    if(i + NUM_THREAD < n)
+      sum[tid] += v[offset1 + i + NUM_THREAD] * v[offset2 + i + NUM_THREAD];
+    i += NUM_THREAD * 2;
   }
   __syncthreads();
   if(tid < 128) sum[tid] += sum[tid + 128];

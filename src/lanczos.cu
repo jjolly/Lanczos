@@ -39,7 +39,7 @@ void sum_sqr_vec(int j, int n, double *v, double *result) {
   if(tid <   4) sum[tid] += sum[tid +  4];
   if(tid <   2) sum[tid] += sum[tid +  2];
   if(tid <   1) sum[tid] += sum[tid +  1];
-  if(i == j * n) *result = sum[0];
+  if(tid == 0) *result = sum[0];
 }
 
 __global__
@@ -67,7 +67,7 @@ void sum_vec_vec(int j, int n, double *v, double *result) {
   if(tid <   4) sum[tid] += sum[tid +  4];
   if(tid <   2) sum[tid] += sum[tid +  2];
   if(tid <   1) sum[tid] += sum[tid +  1];
-  if(i1 == j * n) *result = sum[0];
+  if(tid == 0) *result = sum[0];
 }
 
 __global__
@@ -133,8 +133,7 @@ double *lanczos(SparseMatrix * A, int k)
 
   createfullmatrix(V, A->nrows, k + 1);
   for (i = 0; i < (k + 1) * A->nrows; i++)
-    // V->value[i] = (i < A->nrows) ? randomzahl(i) : 0.0;
-    V->value[i] = (i < A->nrows) ? i : 0.0;
+    V->value[i] = (i < A->nrows) ? randomzahl(i) : 0.0;
 
   arrt = (double *)malloc((k + 1) * (k + 1) * sizeof(double));
   for (i = 0; i < (k + 1) * (k + 1); i++)
@@ -166,17 +165,20 @@ double *lanczos(SparseMatrix * A, int k)
   cudaEventRecord(start, 0);
   sum_sqr_vec<<<1, NUM_THREAD>>>(0, A->nrows, d_v, d_sum);
   for(j = 0; j < k; j++) {
-    //kernel1<<<dimGrid, dimBlock>>>(j, k, d_sum, d_v, A->nrows, A->ncols, d_A_deg, d_A_adj, d_A_value, d_arrt);
-    //sum_vec_vec<<<1, NUM_THREAD>>>(j, A->nrows, d_v, d_sum);
-    //kernel2<<<dimGrid, dimBlock>>>(j, k, d_sum, d_v, A->nrows, A->ncols, d_A_deg, d_A_adj, d_A_value, d_arrt);
-    //sum_sqr_vec<<<1, NUM_THREAD>>>(j, A->nrows, d_v, d_sum);
-    //kernel3<<<dimGrid, dimBlock>>>(j, k, d_sum, d_v, A->nrows, A->ncols, d_A_deg, d_A_adj, d_A_value, d_arrt);
+    kernel1<<<dimGrid, dimBlock>>>(j, k, d_sum, d_v, A->nrows, A->ncols, d_A_deg, d_A_adj, d_A_value, d_arrt);
+    sum_vec_vec<<<1, NUM_THREAD>>>(j, A->nrows, d_v, d_sum);
+    kernel2<<<dimGrid, dimBlock>>>(j, k, d_sum, d_v, A->nrows, A->ncols, d_A_deg, d_A_adj, d_A_value, d_arrt);
+    sum_sqr_vec<<<1, NUM_THREAD>>>(j, A->nrows, d_v, d_sum);
+    kernel3<<<dimGrid, dimBlock>>>(j, k, d_sum, d_v, A->nrows, A->ncols, d_A_deg, d_A_adj, d_A_value, d_arrt);
   }
   cudaEventRecord(stop, 0);
 
   cudaMemcpy(arrt, d_arrt, (k + 1) * (k + 1) * sizeof(double), cudaMemcpyDeviceToHost);
   cudaMemcpy(V->value, d_v, A->nrows * (k + 1) * sizeof(double), cudaMemcpyDeviceToHost);
+  double sum;
+  cudaMemcpy(&sum, d_sum, sizeof(double), cudaMemcpyDeviceToHost);
 
+  cudaFree(d_sum);
   cudaFree(d_arrt);
   cudaFree(d_A_value);
   cudaFree(d_v);
@@ -186,7 +188,7 @@ double *lanczos(SparseMatrix * A, int k)
   cudaEventSynchronize(stop);
   float milliseconds = 0;
   cudaEventElapsedTime(&milliseconds, start, stop);
-  printf("v[0]: %lf, Elapsed runtime %fms\n", V->value[0], milliseconds);
+  printf("sum: %lf, Elapsed runtime %fms\n", sum, milliseconds);
 
   for (j = 0; j < k; j++) {
     diag[j] = arrt[j * (k + 1) + j];

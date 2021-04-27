@@ -1,6 +1,7 @@
 // lanczos
 #include "lanczos.h"
 #include<math.h>
+#include<cuda.h>
 #include<cuda_runtime.h>
 
 void kernel(int k, double *v, int nrows, int ncols, int *A_deg, int *A_adj,
@@ -92,9 +93,33 @@ double *lanczos(SparseMatrix * A, int k)
   cudaEventCreate(&start);
   cudaEventCreate(&stop);
 
+  int *d_A_deg, *d_A_adj;
+  double *d_v, *d_A_value, *d_arrt;
+
+  d_A_deg = (int *)malloc((A->nrows + 1) * sizeof(int));
+  d_A_adj = (int *)malloc(A->deg[A->nrows] * sizeof(int));
+  d_v = (double *)malloc(A->nrows * (k + 1) * sizeof(double));
+  d_A_value = (double *)malloc(A->deg[A->nrows] * sizeof(double));
+  d_arrt = (double *)malloc((k + 1) * (k + 1) * sizeof(double));
+
+  memcpy(d_A_deg, A->deg, (A->nrows + 1) * sizeof(int));
+  memcpy(d_A_adj, A->adj, A->deg[A->nrows] * sizeof(int));
+  memcpy(d_v, V->value, A->nrows * (k + 1) * sizeof(double));
+  memcpy(d_A_value, A->value, A->deg[A->nrows] * sizeof(double));
+  memcpy(d_arrt, arrt, (k + 1) * (k + 1) * sizeof(double));
+
   cudaEventRecord(start, 0);
-  kernel(k, V->value, A->nrows, A->ncols, A->deg, A->adj, A->value, arrt);
+  kernel(k, d_v, A->nrows, A->ncols, d_A_deg, d_A_adj, d_A_value, d_arrt);
   cudaEventRecord(stop, 0);
+
+  memcpy(arrt, d_arrt, (k + 1) * (k + 1) * sizeof(double));
+  memcpy(V->value, d_v, A->nrows * (k + 1) * sizeof(double));
+
+  free(d_arrt);
+  free(d_A_value);
+  free(d_v);
+  free(d_A_adj);
+  free(d_A_deg);
 
   cudaEventSynchronize(stop);
   float milliseconds = 0;

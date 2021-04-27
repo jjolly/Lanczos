@@ -4,75 +4,124 @@
 #include<cuda.h>
 #include<cuda_runtime.h>
 
+#define checkCudaErrors(call)                                \
+ do {                                                        \
+   cudaError_t err = call;                                   \
+   if (err != cudaSuccess) {                                 \
+     printf("CUDA error at %s %d: %s\n", __FILE__, __LINE__, \
+            cudaGetErrorString(err));                        \
+     exit(EXIT_FAILURE);                                     \
+   }                                                         \
+ } while (0)
+
+#define NUM_THREAD (256)
+
 __global__
-void kernel(int k, double *v, int nrows, int ncols, int *A_deg, int *A_adj,
+void sum_sqr_vec(int j, int n, double *v, double *result) {
+  __shared__ double sum[NUM_THREAD];
+  int tid = threadIdx.x;
+  int i = j * n + threadIdx.x;
+  sum[tid] = 0.0;
+  while(i < n) { 
+    sum[tid] += v[i] * v[i];
+    if(i + NUM_THREAD < n)
+      sum[tid] += v[i + NUM_THREAD] * v[i + NUM_THREAD];
+    i += NUM_THREAD * 2;
+  }
+  __syncthreads();
+  if(tid < 128) sum[tid] += sum[tid + 128];
+  __syncthreads();
+  if(tid <  64) sum[tid] += sum[tid +  64];
+  __syncthreads();
+  if(tid <  32) sum[tid] += sum[tid + 32];
+  if(tid <  16) sum[tid] += sum[tid + 16];
+  if(tid <   8) sum[tid] += sum[tid +  8];
+  if(tid <   4) sum[tid] += sum[tid +  4];
+  if(tid <   2) sum[tid] += sum[tid +  2];
+  if(tid <   1) sum[tid] += sum[tid +  1];
+  if(i == j * n) *result = sum[0];
+}
+
+__global__
+void sum_vec_vec(int j, int n, double *v, double *result) {
+  __shared__ double sum[NUM_THREAD];
+  int tid = threadIdx.x;
+  int i1 = j * n + threadIdx.x;
+  int i2 = (j + 1) * n + threadIdx.x;
+  sum[tid] = 0.0;
+  while(i1 < n) { 
+    sum[tid] += v[i1] * v[i2];
+    if(i1 + NUM_THREAD < n)
+      sum[tid] += v[i1 + NUM_THREAD] * v[i2 + NUM_THREAD];
+    i1 += NUM_THREAD * 2;
+    i2 += NUM_THREAD * 2;
+  }
+  __syncthreads();
+  if(tid < 128) sum[tid] += sum[tid + 128];
+  __syncthreads();
+  if(tid <  64) sum[tid] += sum[tid +  64];
+  __syncthreads();
+  if(tid <  32) sum[tid] += sum[tid + 32];
+  if(tid <  16) sum[tid] += sum[tid + 16];
+  if(tid <   8) sum[tid] += sum[tid +  8];
+  if(tid <   4) sum[tid] += sum[tid +  4];
+  if(tid <   2) sum[tid] += sum[tid +  2];
+  if(tid <   1) sum[tid] += sum[tid +  1];
+  if(i1 == j * n) *result = sum[0];
+}
+
+__global__
+void kernel1(int j, int k, double *sum, double *v, int nrows, int ncols, int *A_deg, int *A_adj,
             double *A_value, double *arrt)
 {
-  unsigned int i, j, m;
-  double sum;
-  sum = 0.0;
-  for (i = 0; i < nrows; i++) {
-    // READ from v[0][0..nrows]
-    sum += v[i] * v[i];
-  }
-  sum = 1 / sqrt(sum);
-  for (i = 0; i < nrows; i++) {
-    // WRITE to v[0][0..nrows]
-    v[i] *= sum;
-  }
-  for (j = 0; j < k; j++) {
-    sum = 0.0;
-    for (i = 0; i < nrows; i++) {
-      if (A_deg[i] < A_deg[i+1])
-        for (m = A_deg[i]; m < A_deg[i+1]; m++) {
-          // READ from v[j][0..nrows]
-          sum += v[j * nrows + A_adj[m]] * A_value[m];
-        }
-      // WRITE to v[j+1][0..nrows]
-      v[(j + 1) * nrows + i] = sum;
-      sum = 0.0;
-    }
-
-    if (j > 0) {
-      for (i = 0; i < nrows; i++) {
-        // WRITE to v[j+1][0..nrows]
-        // READ from arrt[j-1][j]
-        // READ from v[j-1][0..nrows]
-        v[(j + 1) * nrows + i] +=
-            (-arrt[(j - 1) * (k + 1) + j]) * v[(j - 1) * nrows + i];
-      }
-    }
-    sum = 0.0;
-    for (i = 0; i < nrows; i++) {
+  int i = blockDim.x * blockIdx.x + threadIdx.x;
+  unsigned int l;
+  double local_sum;
+  // WRITE to v[0][0..nrows]
+  if(j == 0) v[i] *= rsqrt(*sum);
+  local_sum = 0.0;
+  if (A_deg[i] < A_deg[i+1])
+    for (l = A_deg[i]; l < A_deg[i+1]; l++) {
       // READ from v[j][0..nrows]
-      // READ from v[j+1][0..nrows]
-      sum += v[j * nrows + i] * v[(j + 1) * nrows + i];
+      local_sum += v[j * nrows + A_adj[l]] * A_value[l];
     }
-    // WRITE to arrt[j][j]
-    arrt[j * (k + 1) + j] = sum;
+  // WRITE to v[j+1][0..nrows]
+  v[(j + 1) * nrows + i] = local_sum;
 
-    for (i = 0; i < nrows; i++) {
-      // WRITE to v[j+1][0..nrows]
-      // READ from arrt[j][j]
-      // READ from v[j][0..nrows]
-      v[(j + 1) * nrows + i] += (-arrt[j * (k + 1) + j]) * v[j * nrows + i];
-    }
-    sum = 0.0;
-    for (i = 0; i < nrows; i++) {
-      // READ from v[j+1][0..nrows]
-      sum += v[(j + 1) * nrows + i] * v[(j + 1) * nrows + i];
-    }
+  if (j > 0) {
+    // WRITE to v[j+1][0..nrows]
+    // READ from arrt[j-1][j]
+    // READ from v[j-1][0..nrows]
+    v[(j + 1) * nrows + i] +=
+        (-arrt[(j - 1) * (k + 1) + j]) * v[(j - 1) * nrows + i];
+  }
+}
+__global__
+void kernel2(int j, int k, double *sum, double *v, int nrows, int ncols, int *A_deg, int *A_adj,
+            double *A_value, double *arrt)
+{
+  int i = blockDim.x * blockIdx.x + threadIdx.x;
+  // WRITE to arrt[j][j]
+  arrt[j * (k + 1) + j] = *sum;
+
+  // WRITE to v[j+1][0..nrows]
+  // READ from arrt[j][j]
+  // READ from v[j][0..nrows]
+  v[(j + 1) * nrows + i] += (-arrt[j * (k + 1) + j]) * v[j * nrows + i];
+}
+__global__
+void kernel3(int j, int k, double *sum, double *v, int nrows, int ncols, int *A_deg, int *A_adj,
+            double *A_value, double *arrt)
+{
+  int i = blockDim.x * blockIdx.x + threadIdx.x;
     // WRITE to arrt[j+1][j]
-    arrt[(j + 1) * (k + 1) + j] = sqrt(sum);
-    for (i = 0; i < nrows; i++) {
-      // WRITE to v[j+1][0..nrows]
-      // READ from arrt[j+1][j]
-      v[(j + 1) * nrows + i] *= 1 / arrt[(j + 1) * (k + 1) + j];
-    }
+    if(i == 0) arrt[(j + 1) * (k + 1) + j] = sqrt(*sum);
+    // WRITE to v[j+1][0..nrows]
+    // READ from arrt[j+1][j]
+    v[(j + 1) * nrows + i] *= 1 / arrt[(j + 1) * (k + 1) + j];
     // WRITE to arrt[j][j+1]
     // READ from arrt[j+1][j]
     arrt[j * (k + 1) + j + 1] = arrt[(j + 1) * (k + 1) + j];
-  }
 }
 
 double *lanczos(SparseMatrix * A, int k)
@@ -84,36 +133,45 @@ double *lanczos(SparseMatrix * A, int k)
 
   createfullmatrix(V, A->nrows, k + 1);
   for (i = 0; i < (k + 1) * A->nrows; i++)
-    V->value[i] = (i < A->nrows) ? randomzahl(i) : 0.0;
+    // V->value[i] = (i < A->nrows) ? randomzahl(i) : 0.0;
+    V->value[i] = (i < A->nrows) ? i : 0.0;
 
   arrt = (double *)malloc((k + 1) * (k + 1) * sizeof(double));
   for (i = 0; i < (k + 1) * (k + 1); i++)
     arrt[i] = 0.0;
 
   cudaEvent_t start, stop;
-  cudaEventCreate(&start);
-  cudaEventCreate(&stop);
+  checkCudaErrors(cudaEventCreate(&start));
+  checkCudaErrors(cudaEventCreate(&stop));
 
   int *d_A_deg, *d_A_adj;
-  double *d_v, *d_A_value, *d_arrt;
+  double *d_v, *d_A_value, *d_arrt, *d_sum;
 
-  cudaMalloc((void **)&d_A_deg, (A->nrows + 1) * sizeof(int));
-  cudaMalloc((void **)&d_A_adj, A->deg[A->nrows] * sizeof(int));
-  cudaMalloc((void **)&d_v, A->nrows * (k + 1) * sizeof(double));
-  cudaMalloc((void **)&d_A_value, A->deg[A->nrows] * sizeof(double));
-  cudaMalloc((void **)&d_arrt, (k + 1) * (k + 1) * sizeof(double));
+  checkCudaErrors(cudaMalloc((void **)&d_A_deg, (A->nrows + 1) * sizeof(int)));
+  checkCudaErrors(cudaMalloc((void **)&d_A_adj, A->deg[A->nrows] * sizeof(int)));
+  checkCudaErrors(cudaMalloc((void **)&d_v, A->nrows * (k + 1) * sizeof(double)));
+  checkCudaErrors(cudaMalloc((void **)&d_A_value, A->deg[A->nrows] * sizeof(double)));
+  checkCudaErrors(cudaMalloc((void **)&d_arrt, (k + 1) * (k + 1) * sizeof(double)));
+  checkCudaErrors(cudaMalloc((void **)&d_sum, sizeof(double)));
 
-  cudaMemcpy(d_A_deg, A->deg, (A->nrows + 1) * sizeof(int), cudaMemcpyHostToDevice);
-  cudaMemcpy(d_A_adj, A->adj, A->deg[A->nrows] * sizeof(int), cudaMemcpyHostToDevice);
-  cudaMemcpy(d_v, V->value, A->nrows * (k + 1) * sizeof(double), cudaMemcpyHostToDevice);
-  cudaMemcpy(d_A_value, A->value, A->deg[A->nrows] * sizeof(double), cudaMemcpyHostToDevice);
-  cudaMemcpy(d_arrt, arrt, (k + 1) * (k + 1) * sizeof(double), cudaMemcpyHostToDevice);
+  checkCudaErrors(cudaMemcpy(d_A_deg, A->deg, (A->nrows + 1) * sizeof(int), cudaMemcpyHostToDevice));
+  checkCudaErrors(cudaMemcpy(d_A_adj, A->adj, A->deg[A->nrows] * sizeof(int), cudaMemcpyHostToDevice));
+  checkCudaErrors(cudaMemcpy(d_v, V->value, A->nrows * (k + 1) * sizeof(double), cudaMemcpyHostToDevice));
+  checkCudaErrors(cudaMemcpy(d_A_value, A->value, A->deg[A->nrows] * sizeof(double), cudaMemcpyHostToDevice));
+  checkCudaErrors(cudaMemcpy(d_arrt, arrt, (k + 1) * (k + 1) * sizeof(double), cudaMemcpyHostToDevice));
   
-  dim3 dimGrid(1);
-  dim3 dimBlock(1);
+  dim3 dimGrid((A->nrows + NUM_THREAD - 1) / NUM_THREAD);
+  dim3 dimBlock(NUM_THREAD);
 
   cudaEventRecord(start, 0);
-  kernel<<<dimGrid, dimBlock>>>(k, d_v, A->nrows, A->ncols, d_A_deg, d_A_adj, d_A_value, d_arrt);
+  sum_sqr_vec<<<1, NUM_THREAD>>>(0, A->nrows, d_v, d_sum);
+  for(j = 0; j < k; j++) {
+    //kernel1<<<dimGrid, dimBlock>>>(j, k, d_sum, d_v, A->nrows, A->ncols, d_A_deg, d_A_adj, d_A_value, d_arrt);
+    //sum_vec_vec<<<1, NUM_THREAD>>>(j, A->nrows, d_v, d_sum);
+    //kernel2<<<dimGrid, dimBlock>>>(j, k, d_sum, d_v, A->nrows, A->ncols, d_A_deg, d_A_adj, d_A_value, d_arrt);
+    //sum_sqr_vec<<<1, NUM_THREAD>>>(j, A->nrows, d_v, d_sum);
+    //kernel3<<<dimGrid, dimBlock>>>(j, k, d_sum, d_v, A->nrows, A->ncols, d_A_deg, d_A_adj, d_A_value, d_arrt);
+  }
   cudaEventRecord(stop, 0);
 
   cudaMemcpy(arrt, d_arrt, (k + 1) * (k + 1) * sizeof(double), cudaMemcpyDeviceToHost);
@@ -128,7 +186,7 @@ double *lanczos(SparseMatrix * A, int k)
   cudaEventSynchronize(stop);
   float milliseconds = 0;
   cudaEventElapsedTime(&milliseconds, start, stop);
-  printf("Elapsed runtime %fms\n", milliseconds);
+  printf("v[0]: %lf, Elapsed runtime %fms\n", V->value[0], milliseconds);
 
   for (j = 0; j < k; j++) {
     diag[j] = arrt[j * (k + 1) + j];

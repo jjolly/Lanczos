@@ -7,12 +7,12 @@ void printsparsematrix(SparseMatrix A) {
   for (i=0; i<A.nrows; i++) {
       printf(" row %6d:\n", i);
       for (k=0; k<A.deg[i]; k++) {
-	  j=A.adj[i][k];
+	  j=A.adj[i * A.ncols + k];
 	  printf("%12d", j);
       }
       printf("\n");
       for (k=0; k<A.deg[i]; k++) {
-	  a=A.value[i][k];
+	  a=A.value[i * A.ncols + k];
 	  printf("%12.4le", a);
       }
       printf("\n");

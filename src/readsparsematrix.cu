@@ -6,7 +6,7 @@ int readsparsematrix(char *filename, SparseMatrix * A)
 {
 
   FILE *fp;
-  int i, l, m, n, *deg;
+  int i, j, l, m, n, *deg;
   fp = fopen(filename, "r");
 
   if (fp == NULL) {
@@ -16,12 +16,14 @@ int readsparsematrix(char *filename, SparseMatrix * A)
   /* end if */
   fscanf(fp, "%d", &m);
   fscanf(fp, "%d", &n);
-  deg = (int *)malloc(m * sizeof(int));
+  deg = (int *)malloc(m * sizeof(int) + 1);
   l = 0;
   for (i = 0; i < m; i++) {
-    fscanf(fp, "%d", &(deg[i]));
-    l += deg[i];
+    deg[i] = l;
+    fscanf(fp, "%d", &j);
+    l += j;
   }
+  deg[m] = l;
   createsparsematrix(A, m, n, deg);
   free(deg);
 
